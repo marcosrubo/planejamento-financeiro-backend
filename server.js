@@ -11,6 +11,14 @@ app.use(express.json());
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 
+// LOGS DE DIAGNÓSTICO
+console.log('----------------------------------------');
+console.log('Inicializando servidor...');
+console.log('PORT:', PORT);
+console.log('SUPABASE_URL carregada:', JSON.stringify(supabaseUrl));
+console.log('SUPABASE_KEY existe?', !!supabaseKey);
+console.log('----------------------------------------');
+
 if (!supabaseUrl || !supabaseKey) {
   console.error('Erro: defina SUPABASE_URL e SUPABASE_KEY nas variáveis de ambiente.');
   process.exit(1);
@@ -30,6 +38,16 @@ function validarNivel(nivel) {
   return [1, 2, 3].includes(Number(nivel));
 }
 
+function logErroSupabase(contexto, error) {
+  console.error(`Erro em ${contexto}:`, {
+    message: error?.message || null,
+    details: error?.details || null,
+    hint: error?.hint || null,
+    code: error?.code || null,
+    fullError: error || null
+  });
+}
+
 async function buscarCategoriaPorId(id) {
   const { data, error } = await supabase
     .from('categorias')
@@ -37,7 +55,11 @@ async function buscarCategoriaPorId(id) {
     .eq('id', id)
     .single();
 
-  if (error) return null;
+  if (error) {
+    logErroSupabase(`buscarCategoriaPorId(${id})`, error);
+    return null;
+  }
+
   return data;
 }
 
@@ -147,6 +169,7 @@ app.get('/', (req, res) => {
       <body style="font-family: Arial; padding: 20px;">
         <h1>API RuboWeb 🚀</h1>
         <p>CRUD de categorias funcionando.</p>
+        <p>Servidor no ar.</p>
       </body>
     </html>
   `);
@@ -165,13 +188,13 @@ app.get('/categorias', async (req, res) => {
       .order('nome', { ascending: true });
 
     if (error) {
-      console.error('Erro ao buscar categorias:', error);
+      logErroSupabase('GET /categorias', error);
       return res.status(500).json({ error: 'Erro ao buscar categorias.' });
     }
 
     res.json(data);
   } catch (err) {
-    console.error('Erro interno:', err);
+    console.error('Erro interno em GET /categorias:', err);
     res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 });
@@ -195,12 +218,13 @@ app.get('/categorias/:id', async (req, res) => {
       .single();
 
     if (error || !data) {
+      if (error) logErroSupabase(`GET /categorias/${id}`, error);
       return res.status(404).json({ error: 'Categoria não encontrada.' });
     }
 
     res.json(data);
   } catch (err) {
-    console.error('Erro interno:', err);
+    console.error(`Erro interno em GET /categorias/${req.params.id}:`, err);
     res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 });
@@ -226,7 +250,7 @@ app.post('/categorias', async (req, res) => {
       .single();
 
     if (error) {
-      console.error('Erro ao inserir categoria:', error);
+      logErroSupabase('POST /categorias', error);
 
       if (error.message && error.message.toLowerCase().includes('uq_categorias_nome_parent')) {
         return res.status(400).json({
@@ -239,7 +263,7 @@ app.post('/categorias', async (req, res) => {
 
     res.status(201).json(data);
   } catch (err) {
-    console.error('Erro interno:', err);
+    console.error('Erro interno em POST /categorias:', err);
     res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 });
@@ -275,14 +299,13 @@ app.put('/categorias/:id', async (req, res) => {
       return res.status(validacao.status).json({ error: validacao.message });
     }
 
-    // Impede rebaixar/subir de forma que deixe filhos inválidos
     const { data: filhos, error: erroFilhos } = await supabase
       .from('categorias')
       .select('id, nivel')
       .eq('parent_id', id);
 
     if (erroFilhos) {
-      console.error('Erro ao verificar filhos:', erroFilhos);
+      logErroSupabase(`PUT /categorias/${id} - verificar filhos`, erroFilhos);
       return res.status(500).json({ error: 'Erro ao verificar filhos da categoria.' });
     }
 
@@ -313,13 +336,13 @@ app.put('/categorias/:id', async (req, res) => {
       .single();
 
     if (error) {
-      console.error('Erro ao atualizar categoria:', error);
+      logErroSupabase(`PUT /categorias/${id}`, error);
       return res.status(500).json({ error: 'Erro ao atualizar categoria.' });
     }
 
     res.json(data);
   } catch (err) {
-    console.error('Erro interno:', err);
+    console.error(`Erro interno em PUT /categorias/${req.params.id}:`, err);
     res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 });
@@ -349,7 +372,7 @@ app.delete('/categorias/:id', async (req, res) => {
       .limit(1);
 
     if (erroFilhos) {
-      console.error('Erro ao verificar filhos:', erroFilhos);
+      logErroSupabase(`DELETE /categorias/${id} - verificar filhos`, erroFilhos);
       return res.status(500).json({ error: 'Erro ao verificar filhos da categoria.' });
     }
 
@@ -365,13 +388,13 @@ app.delete('/categorias/:id', async (req, res) => {
       .eq('id', id);
 
     if (error) {
-      console.error('Erro ao excluir categoria:', error);
+      logErroSupabase(`DELETE /categorias/${id}`, error);
       return res.status(500).json({ error: 'Erro ao excluir categoria.' });
     }
 
     res.json({ message: 'Categoria excluída com sucesso.' });
   } catch (err) {
-    console.error('Erro interno:', err);
+    console.error(`Erro interno em DELETE /categorias/${req.params.id}:`, err);
     res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 });
